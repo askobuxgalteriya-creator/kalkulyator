@@ -1,2 +1,0 @@
-# kalkulyator
-savdo hisob kitobi
