@@ -96,7 +96,6 @@
   .settings-tabs { display: flex; gap: 8px; margin-bottom: 16px; }
   .settings-tabs button { flex: 1; padding: 9px; border: 2px solid #e5e7eb; border-radius: 8px; background: white; color: #6b7280; font-size: 13px; font-weight: 600; cursor: pointer; }
   .settings-tabs button.active { border-color: #2563eb; background: #eff6ff; color: #1e3a8a; }
-
   .settings-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px; }
   .settings-grid label { font-size: 13px; margin-bottom: 5px; }
   .settings-grid input { width: 100%; font-size: 16px; font-weight: 600; padding: 10px 12px; border: 2px solid #e5e7eb; border-radius: 8px; }
@@ -160,7 +159,8 @@
   </div>
 
   <div class="panel" id="panelSozlama">
-    <div class="saved-msg" id="savedMsg">Narxlar saqlandi</div>
+    <div class="saved-msg" id="savedMsg">Yangilandi</div>
+    <p style="font-size:13px;color:#6b7280;margin:0 0 14px;">Bu narxlar barcha foydalanuvchilar uchun umumiy — o'zgartirish uchun pastdagi tugmani bosing.</p>
 
     <div class="settings-tabs">
       <button id="setTabOddiy" class="active" onclick="sozlamaTab('oddiy')">Oddiy holat</button>
@@ -171,11 +171,11 @@
     <div class="settings-grid">
       <div>
         <label>Minimal</label>
-        <input type="number" id="avtMin" oninput="saqlaNarxlar()">
+        <input type="number" id="avtMin" readonly>
       </div>
       <div>
         <label>Maksimal</label>
-        <input type="number" id="avtMax" oninput="saqlaNarxlar()">
+        <input type="number" id="avtMax" readonly>
       </div>
     </div>
 
@@ -183,46 +183,65 @@
     <div class="settings-grid">
       <div>
         <label>Minimal</label>
-        <input type="number" id="kolMin" oninput="saqlaNarxlar()">
+        <input type="number" id="kolMin" readonly>
       </div>
       <div>
         <label>Maksimal</label>
-        <input type="number" id="kolMax" oninput="saqlaNarxlar()">
+        <input type="number" id="kolMax" readonly>
       </div>
     </div>
 
-    <button class="secondary" onclick="standartHolat()">Shu rejim uchun standart narxga qaytarish</button>
+    <a href="https://github.com/askobuxgalteriya-creator/kalkulyator/edit/main/narxlar.json" target="_blank" style="text-decoration:none;">
+      <button class="main" style="margin-bottom:10px;" type="button">GitHub'da narxni o'zgartirish</button>
+    </a>
+    <button class="secondary" onclick="narxlarniYuklash(true)">Qayta yuklash</button>
   </div>
 </div>
+
 
 <script>
 const DEFAULTS = {
   oddiy:  { avtMin: 260000, avtMax: 280000, kolMin: 20000, kolMax: 40000 },
   aksiya: { avtMin: 280000, avtMax: 300000, kolMin: 25000, kolMax: 45000 }
 };
-const STORAGE_KEY = 'savdo_kalkulyatori_narxlar_v2';
 const MODE_KEY = 'savdo_kalkulyatori_faol_rejim';
 
 let narxlar = JSON.parse(JSON.stringify(DEFAULTS));
 let faolRejim = 'oddiy';
 let sozlamaKorinishRejimi = 'oddiy';
 
-function yuklaHammasi() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) narxlar = JSON.parse(raw);
-  } catch (e) {}
+function yuklaRejim() {
   try {
     const m = localStorage.getItem(MODE_KEY);
     if (m === 'oddiy' || m === 'aksiya') faolRejim = m;
   } catch (e) {}
 }
 
-function saqlaHammasi() {
+function saqlaRejim() {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(narxlar));
     localStorage.setItem(MODE_KEY, faolRejim);
   } catch (e) {}
+}
+
+function narxlarniYuklash(korsatXabar) {
+  fetch('narxlar.json?t=' + Date.now())
+    .then(r => r.json())
+    .then(data => {
+      if (data && data.oddiy && data.aksiya) {
+        narxlar = data;
+        yangilaModeTugmalari();
+        if (document.getElementById('panelSozlama').classList.contains('active')) {
+          sozlamaTab(sozlamaKorinishRejimi);
+        }
+        if (korsatXabar) {
+          const msg = document.getElementById('savedMsg');
+          msg.style.display = 'block';
+          clearTimeout(window._savedTimeout);
+          window._savedTimeout = setTimeout(() => { msg.style.display = 'none'; }, 1500);
+        }
+      }
+    })
+    .catch(() => { /* narxlar.json topilmasa, standart narxlar bilan ishlayveradi */ });
 }
 
 function switchTab(tab) {
@@ -247,7 +266,7 @@ function yangilaModeTugmalari() {
 
 function tanlaRejim(rejim) {
   faolRejim = rejim;
-  saqlaHammasi();
+  saqlaRejim();
   yangilaModeTugmalari();
 }
 
@@ -260,28 +279,6 @@ function sozlamaTab(rejim) {
   document.getElementById('avtMax').value = v.avtMax;
   document.getElementById('kolMin').value = v.kolMin;
   document.getElementById('kolMax').value = v.kolMax;
-}
-
-function saqlaNarxlar() {
-  narxlar[sozlamaKorinishRejimi] = {
-    avtMin: parseFloat(document.getElementById('avtMin').value) || DEFAULTS[sozlamaKorinishRejimi].avtMin,
-    avtMax: parseFloat(document.getElementById('avtMax').value) || DEFAULTS[sozlamaKorinishRejimi].avtMax,
-    kolMin: parseFloat(document.getElementById('kolMin').value) || DEFAULTS[sozlamaKorinishRejimi].kolMin,
-    kolMax: parseFloat(document.getElementById('kolMax').value) || DEFAULTS[sozlamaKorinishRejimi].kolMax
-  };
-  saqlaHammasi();
-  yangilaModeTugmalari();
-  const msg = document.getElementById('savedMsg');
-  msg.style.display = 'block';
-  clearTimeout(window._savedTimeout);
-  window._savedTimeout = setTimeout(() => { msg.style.display = 'none'; }, 1500);
-}
-
-function standartHolat() {
-  narxlar[sozlamaKorinishRejimi] = { ...DEFAULTS[sozlamaKorinishRejimi] };
-  saqlaHammasi();
-  sozlamaTab(sozlamaKorinishRejimi);
-  yangilaModeTugmalari();
 }
 
 function hisobla() {
@@ -350,9 +347,10 @@ document.getElementById('summa').addEventListener('keypress', function(e) {
   if (e.key === 'Enter') hisobla();
 });
 
-yuklaHammasi();
+yuklaRejim();
 yangilaModeTugmalari();
 sozlamaTab(faolRejim);
+narxlarniYuklash(false);
 </script>
 
 </body>
