@@ -1,11 +1,13 @@
 {
   "oddiy": {
+    "avtArzon": { "min": 140000, "max": 160000 }
     "avt": { "min": 260000, "max": 280000 },
     "akm": { "min": 0, "max": 0 },
     "dsk": { "min": 0, "max": 0 },
     "kol": { "min": 30000,  "max": 40000  }
   },
   "aksiya": {
+    "avtArzon": { "min": 160000, "max": 180000 }
     "avt": { "min": 290000, "max": 310000 },
     "akm": { "min": 0, "max": 0 },
     "dsk": { "min": 0, "max": 0 },
