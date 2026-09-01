@@ -266,14 +266,14 @@
 const DEFAULTS = {
   oddiy: {
     avt: { min: 260000, max: 280000 },
-    avtArzon: { min: 140000, max: 160000 }, // faqat narxlar.json'dan olinadi, standart narxi yo'q
+    avtArzon: { min: 0, max: 0 }, // faqat narxlar.json'dan olinadi, standart narxi yo'q
     akm: { min: 0, max: 0 },
     dsk: { min: 0, max: 0 },
     kol: { min: 20000,  max: 40000  }
   },
   aksiya: {
     avt: { min: 290000, max: 310000 },
-    avtArzon: { min: 160000, max: 180000 }, // faqat narxlar.json'dan olinadi, standart narxi yo'q
+    avtArzon: { min: 0, max: 0 }, // faqat narxlar.json'dan olinadi, standart narxi yo'q
     akm: { min: 0, max: 0 },
     dsk: { min: 0, max: 0 },
     kol: { min: 25000,  max: 45000  }
@@ -394,15 +394,17 @@ function sozlamaTab(rejim) {
   tovarning dona narxi o'z min-max oralig'idan chiqmasligi kerak.
 
   Tanlov ustuvorliklari (yuqoridan pastga, har biri avvalgisi ichida):
-  1) Kolotka iloji boricha kamroq (imkon bo'lsa, umuman) ishlatiladi —
-     avval faqat katta tovarlar bilan S ga aniq tushadigan variant
-     qidiriladi; bo'lmasa, kolotka eng kam miqdorda qo'shiladi.
-  2) Avval avtobalon, keyin avtoshina ishlatiladi — ya'ni avtoshina
-     iloji boricha kamroq (imkon bo'lsa, umuman) sotiladi; faqat
-     avtobalon bilan S ga tushmasa, avtoshina qo'shiladi.
-  3) Shu darajalar ichida, mavjud (tugamagan) katta tovarlarning
-     summalari bir-biriga imkon qadar teng bo'ladigan variant tanlanadi.
-  4) Bir nechtasi teng bo'lsa, ular orasidan tasodifiy biri olinadi.
+  1) ENG QIMMAT SHINA (avtobalon) IMKON QADAR KO'PROQ sotiladi — summa
+     yetgunicha avval shu tovar to'ldiriladi, ya'ni uning soni maksimal
+     bo'ladi.
+  2) Undan keyin qolgan summa avvalo arzon avtoshina bilan yopiladi —
+     avtoshina soni imkon qadar ko'p bo'ladi.
+  3) Kolotka faqat oxirgi qoldiqni to'ldiradi — uning summasi iloji
+     boricha kam bo'ladi.
+  4) Shu darajalar ichida, qolgan mavjud tovarlarning (akumlyator,
+     diska) summalari bir-biriga imkon qadar teng bo'ladigan variant
+     tanlanadi.
+  5) Bir nechtasi teng bo'lsa, ular orasidan tasodifiy biri olinadi.
 */
 function hisobla() {
   const S = parseFloat(document.getElementById('summa').value);
@@ -426,11 +428,20 @@ function hisobla() {
     { key: 'akm', min: AKM.min, max: AKM.max },
     { key: 'dsk', min: DSK.min, max: DSK.max }
   ];
-  const QIDIRUV_CHEGARASI = 60;
   // Agar tovarning min va max narxi ikkalasi ham 0 bo'lsa — tovar qolmagan
   // degani, shu tovar hisoblashda umuman ishtirok etmasligi kerak (soni 0).
   const mavjud = bigItems.map(it => !(it.min <= 0 && it.max <= 0));
-  const maxN = bigItems.map((it, i) => mavjud[i] ? Math.min(QIDIRUV_CHEGARASI, Math.floor(S / it.min)) : 0);
+  // Soni chegarasi qat'iy emas — qolgan summaga nechta dona sig'sa, shuncha.
+  // (Ilgari 60 dona qat'iy chegara bor edi, shu sababli katta summalarda
+  // shina 60 tada to'xtab, qolgani kolotkaga o'tib ketardi.)
+  function sonChegarasi(i, byudjet, xavfsizChegara) {
+    if (!mavjud[i] || byudjet <= 0) return 0;
+    const n = Math.floor(byudjet / bigItems[i].min);
+    return xavfsizChegara ? Math.min(xavfsizChegara, n) : n;
+  }
+  // Akumlyator va diska ikki qavatli to'liq qidiruvda ishtirok etgani uchun
+  // ularga hisoblash tezligini saqlaydigan xavfsizlik chegarasi qo'yiladi.
+  const YORDAMCHI_CHEGARA = 1000;
   const KOL_MAVJUD = !(KOL.min <= 0 && KOL.max <= 0);
 
   function bigPrices(usedMin, usedMax, bigTotal) {
@@ -439,50 +450,73 @@ function hisobla() {
     return bigItems.map(it => it.min + t * (it.max - it.min));
   }
 
-  // Mavjud tovarlar summalari bir-biriga qanchalik yaqinligini o'lchaydi
-  // (0 — mukammal teng; kattaroq son — tengsizlik kattaroq).
+  // Qolgan mavjud tovarlar (akumlyator, diska) summalari bir-biriga
+  // qanchalik yaqinligini o'lchaydi (0 — mukammal teng).
+  // Shina va kolotka bu yerda hisobga olinmaydi — ular yuqoriroq
+  // ustuvorliklar orqali hal qilinadi.
   function tengsizlikBalli(sums) {
-    const qatnashganlar = sums.filter((s, i) => mavjud[i]);
+    const qatnashganlar = sums.filter((s, i) => i >= 2 && mavjud[i]);
     if (qatnashganlar.length <= 1) return 0;
     return Math.max(...qatnashganlar) - Math.min(...qatnashganlar);
   }
 
   const TOLERANS = 0.5; // so'mdagi kichik kasr farqlarga chidamli bo'lish uchun
-  let engKamKolotka = Infinity;
-  let nomzodlar = []; // faqat eng kam kolotka darajasidagi nomzodlar saqlanadi
+  let nomzodlar = []; // faqat eng yaxshi darajadagi (teng qiymatli) nomzodlar
+
+  // Ikki variantni ustuvorliklar bo'yicha taqqoslaydi.
+  // Manfiy natija — "a" yaxshiroq, musbat — "b" yaxshiroq.
+  function taqqosla(a, b) {
+    if (a.n1 !== b.n1) return b.n1 - a.n1;               // 1) avtobalon ko'proq
+    if (a.n2 !== b.n2) return b.n2 - a.n2;               // 2) avtoshina ko'proq
+    if (Math.abs(a.kolSumma - b.kolSumma) > TOLERANS) {  // 3) kolotka kamroq
+      return a.kolSumma - b.kolSumma;
+    }
+    if (Math.abs(a.teng - b.teng) > TOLERANS) {          // 4) qolganlari tengroq
+      return a.teng - b.teng;
+    }
+    return 0;
+  }
 
   function nomzodQosh(n1, n2, n3, n4, n5, p1, p2, p3, p4, p5, kolSumma) {
-    if (kolSumma > engKamKolotka + TOLERANS) return; // yomonroq, e'tiborsiz qoldiriladi
     const sums = [n1 * p1, n2 * p2, n3 * p3, n4 * p4];
     const nomzod = {
       n1, n2, n3, n4, n5, p1, p2, p3, p4, p5,
       avtQSumma: sums[0], avtASumma: sums[1], akmSumma: sums[2], dskSumma: sums[3], kolSumma,
+      // Tenglik faqat akumlyator va diska uchun o'lchanadi — shina va
+      // kolotka ustuvorliklari yuqorida hal qilingan.
       teng: tengsizlikBalli(sums)
     };
-    if (kolSumma < engKamKolotka - TOLERANS) {
-      engKamKolotka = kolSumma;
-      nomzodlar = [nomzod];
-    } else {
-      nomzodlar.push(nomzod);
-    }
+    if (nomzodlar.length === 0) { nomzodlar = [nomzod]; return; }
+    const farq = taqqosla(nomzod, nomzodlar[0]);
+    if (farq < 0) nomzodlar = [nomzod];       // yangisi yaxshiroq
+    else if (farq === 0) nomzodlar.push(nomzod); // teng — tasodifiy tanlash uchun
   }
 
-  for (let n1 = 0; n1 <= maxN[0]; n1++) { // avtobalon
-    for (let n2 = 0; n2 <= maxN[1]; n2++) { // avtoshina
-      const usedMin12 = n1 * bigItems[0].min + n2 * bigItems[1].min;
-      if (usedMin12 > S) break;
-      for (let n3 = 0; n3 <= maxN[2]; n3++) { // akumlyator
+  // Avtobalon soni eng katta qiymatdan boshlab kamayib boradi va birinchi
+  // mos variant topilgan zahoti to'xtaydi — chunki avtobalon ko'p bo'lgan
+  // variant har doim ustun. Xuddi shunday, shu avtobalon soni ichida
+  // avtoshina ham eng kattadan boshlab qidiriladi.
+  for (let n1 = sonChegarasi(0, S); n1 >= 0; n1--) { // avtobalon
+    const used1 = n1 * bigItems[0].min;
+    let n1Topildi = false;
+    for (let n2 = sonChegarasi(1, S - used1); n2 >= 0; n2--) { // avtoshina
+      const usedMin12 = used1 + n2 * bigItems[1].min;
+      let n2Topildi = false;
+      const maxN3 = sonChegarasi(2, S - usedMin12, YORDAMCHI_CHEGARA);
+      for (let n3 = 0; n3 <= maxN3; n3++) { // akumlyator
         const usedMin123 = usedMin12 + n3 * bigItems[2].min;
         if (usedMin123 > S) break;
-        for (let n4 = 0; n4 <= maxN[3]; n4++) { // diska
+        const maxN4 = sonChegarasi(3, S - usedMin123, YORDAMCHI_CHEGARA);
+        for (let n4 = 0; n4 <= maxN4; n4++) { // diska
           const usedMin = usedMin123 + n4 * bigItems[3].min;
           if (usedMin > S) break;
           const usedMax = n1 * bigItems[0].max + n2 * bigItems[1].max + n3 * bigItems[2].max + n4 * bigItems[3].max;
 
           if (S >= usedMin && S <= usedMax && usedMax > 0) {
-            // Kolotkasiz, aniq mos keladi — bu har doim eng ustuvor holat.
+            // Kolotkasiz, aniq mos keladi.
             const prices = bigPrices(usedMin, usedMax, S);
             nomzodQosh(n1, n2, n3, n4, 0, prices[0], prices[1], prices[2], prices[3], 0, 0);
+            n2Topildi = true;
             continue;
           }
 
@@ -503,20 +537,22 @@ function hisobla() {
           const bigTotal = S - R;
           const prices = bigPrices(usedMin, usedMax, bigTotal);
           nomzodQosh(n1, n2, n3, n4, n5, prices[0], prices[1], prices[2], prices[3], R / n5, R);
+          n2Topildi = true;
         }
       }
+      // Shu avtobalon soni uchun eng katta avtoshina soni topildi — pastroq
+      // variantlarni ko'rib o'tirishning hojati yo'q.
+      if (n2Topildi) { n1Topildi = true; break; }
     }
+    // Eng katta avtobalon soni topildi — qidiruv tugadi.
+    if (n1Topildi) break;
   }
 
   let found = null;
   if (nomzodlar.length > 0) {
-    // Avval avtobalon, keyin avtoshina — shu daraja (kolotka) ichida
-    // avtoshina soni eng kam bo'lgan variantlar tanlanadi.
-    const engKamArzon = Math.min(...nomzodlar.map(c => c.n2));
-    const arzonYaxshilari = nomzodlar.filter(c => c.n2 === engKamArzon);
-    const engTengi = Math.min(...arzonYaxshilari.map(c => c.teng));
-    const engYaxshilari = arzonYaxshilari.filter(c => c.teng <= engTengi + TOLERANS);
-    found = engYaxshilari[Math.floor(Math.random() * engYaxshilari.length)];
+    // Ro'yxatda faqat ustuvorliklar bo'yicha eng yaxshi (o'zaro teng)
+    // variantlar qoladi — ular orasidan tasodifiy biri olinadi.
+    found = nomzodlar[Math.floor(Math.random() * nomzodlar.length)];
   }
 
   if (!found) {
