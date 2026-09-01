@@ -152,6 +152,11 @@
           <div class="sub" id="avtNarx">0 so'mdan</div>
         </div>
         <div class="metric">
+          <div class="label">Avtoshina</div>
+          <div class="value" id="arzSoni">0</div>
+          <div class="sub" id="arzNarx">0 so'mdan</div>
+        </div>
+        <div class="metric">
           <div class="label">Akumlyator</div>
           <div class="value" id="akmSoni">0</div>
           <div class="sub" id="akmNarx">0 so'mdan</div>
@@ -170,6 +175,7 @@
       <div class="summary">
         <table>
           <tr><td>Avtobalon summasi</td><td id="avtJami">0 so'm</td></tr>
+          <tr><td>Avtoshina summasi</td><td id="arzJami">0 so'm</td></tr>
           <tr><td>Akumlyator summasi</td><td id="akmJami">0 so'm</td></tr>
           <tr><td>Diska summasi</td><td id="dskJami">0 so'm</td></tr>
           <tr><td>Kolotka summasi</td><td id="kolJami">0 so'm</td></tr>
@@ -197,6 +203,18 @@
       <div>
         <label>Maksimal</label>
         <input type="number" id="avtMax" readonly>
+      </div>
+    </div>
+
+    <div class="group-title">Avtoshina narxi (so'm)</div>
+    <div class="settings-grid">
+      <div>
+        <label>Minimal</label>
+        <input type="number" id="avtArzonMin" readonly>
+      </div>
+      <div>
+        <label>Maksimal</label>
+        <input type="number" id="avtArzonMax" readonly>
       </div>
     </div>
 
@@ -248,12 +266,14 @@
 const DEFAULTS = {
   oddiy: {
     avt: { min: 260000, max: 280000 },
+    avtArzon: { min: 0, max: 0 }, // faqat narxlar.json'dan olinadi, standart narxi yo'q
     akm: { min: 250000, max: 260000 },
     dsk: { min: 200000, max: 210000 },
     kol: { min: 20000,  max: 40000  }
   },
   aksiya: {
     avt: { min: 280000, max: 300000 },
+    avtArzon: { min: 0, max: 0 }, // faqat narxlar.json'dan olinadi, standart narxi yo'q
     akm: { min: 280000, max: 300000 },
     dsk: { min: 225000, max: 240000 },
     kol: { min: 25000,  max: 45000  }
@@ -289,11 +309,23 @@ function narxlarToTekshir(data) {
   return true;
 }
 
+function avtArzonToTekshir(v) {
+  return v && typeof v.min === 'number' && typeof v.max === 'number';
+}
+
 function narxlarniYuklash(korsatXabar) {
   fetch('narxlar.json?t=' + Date.now())
     .then(r => r.json())
     .then(data => {
       if (narxlarToTekshir(data)) {
+        // Avtoshina narxi FAQAT narxlar.json'dan olinishi kerak — standart
+        // qiymatdan foydalanilmaydi. JSON'da hali bo'lmasa, avtoshina "tugagan"
+        // deb hisoblanadi (min=max=0) va hisoblashda ishtirok etmaydi.
+        for (const rejim of ['oddiy', 'aksiya']) {
+          if (!avtArzonToTekshir(data[rejim].avtArzon)) {
+            data[rejim].avtArzon = { min: 0, max: 0 };
+          }
+        }
         narxlar = data;
         yangilaModeTugmalari();
         if (document.getElementById('panelSozlama').classList.contains('active')) {
@@ -343,6 +375,8 @@ function sozlamaTab(rejim) {
   const v = narxlar[rejim];
   document.getElementById('avtMin').value = v.avt.min;
   document.getElementById('avtMax').value = v.avt.max;
+  document.getElementById('avtArzonMin').value = v.avtArzon.min;
+  document.getElementById('avtArzonMax').value = v.avtArzon.max;
   document.getElementById('akmMin').value = v.akm.min;
   document.getElementById('akmMax').value = v.akm.max;
   document.getElementById('dskMin').value = v.dsk.min;
@@ -353,23 +387,27 @@ function sozlamaTab(rejim) {
 
 /*
   Hisoblash mantig'i:
-  - Avtobalon, Akumlyator, Diska — "katta" tovarlar (o'z narx oralig'i bilan).
+  - Avtobalon, Avtoshina, Akumlyator, Diska — "katta" tovarlar
+    (har birining o'z narx oralig'i bilan).
   - Kolotka — qoldiqni to'ldiruvchi mayda tovar.
   Barcha tovarlarning yig'indisi aniq S ga teng bo'lishi kerak, har bir
   tovarning dona narxi o'z min-max oralig'idan chiqmasligi kerak.
 
-  Tanlov ustuvorliklari:
+  Tanlov ustuvorliklari (yuqoridan pastga, har biri avvalgisi ichida):
   1) Kolotka iloji boricha kamroq (imkon bo'lsa, umuman) ishlatiladi —
      avval faqat katta tovarlar bilan S ga aniq tushadigan variant
      qidiriladi; bo'lmasa, kolotka eng kam miqdorda qo'shiladi.
-  2) Shu daraja ichida, mavjud (tugamagan) katta tovarlarning summalari
-     bir-biriga imkon qadar teng bo'ladigan variant tanlanadi.
-  3) Bir nechtasi teng bo'lsa, ular orasidan tasodifiy biri olinadi.
+  2) Avval avtobalon, keyin avtoshina ishlatiladi — ya'ni avtoshina
+     iloji boricha kamroq (imkon bo'lsa, umuman) sotiladi; faqat
+     avtobalon bilan S ga tushmasa, avtoshina qo'shiladi.
+  3) Shu darajalar ichida, mavjud (tugamagan) katta tovarlarning
+     summalari bir-biriga imkon qadar teng bo'ladigan variant tanlanadi.
+  4) Bir nechtasi teng bo'lsa, ular orasidan tasodifiy biri olinadi.
 */
 function hisobla() {
   const S = parseFloat(document.getElementById('summa').value);
   const cfg = narxlar[faolRejim];
-  const AVT = cfg.avt, AKM = cfg.akm, DSK = cfg.dsk, KOL = cfg.kol;
+  const AVTQ = cfg.avt, AVTA = cfg.avtArzon, AKM = cfg.akm, DSK = cfg.dsk, KOL = cfg.kol;
 
   const natijaEl = document.getElementById('natija');
   const xatoEl = document.getElementById('xato');
@@ -381,8 +419,10 @@ function hisobla() {
     return;
   }
 
+  // Tartib muhim: 0-avtobalon, 1-avtoshina, 2-akumlyator, 3-diska.
   const bigItems = [
-    { key: 'avt', min: AVT.min, max: AVT.max },
+    { key: 'avtQ', min: AVTQ.min, max: AVTQ.max },
+    { key: 'avtA', min: AVTA.min, max: AVTA.max },
     { key: 'akm', min: AKM.min, max: AKM.max },
     { key: 'dsk', min: DSK.min, max: DSK.max }
   ];
@@ -411,12 +451,12 @@ function hisobla() {
   let engKamKolotka = Infinity;
   let nomzodlar = []; // faqat eng kam kolotka darajasidagi nomzodlar saqlanadi
 
-  function nomzodQosh(n1, n2, n3, n4, p1, p2, p3, p4, kolSumma) {
+  function nomzodQosh(n1, n2, n3, n4, n5, p1, p2, p3, p4, p5, kolSumma) {
     if (kolSumma > engKamKolotka + TOLERANS) return; // yomonroq, e'tiborsiz qoldiriladi
-    const sums = [n1 * p1, n2 * p2, n3 * p3];
+    const sums = [n1 * p1, n2 * p2, n3 * p3, n4 * p4];
     const nomzod = {
-      n1, n2, n3, n4, p1, p2, p3, p4,
-      avtSumma: sums[0], akmSumma: sums[1], dskSumma: sums[2], kolSumma,
+      n1, n2, n3, n4, n5, p1, p2, p3, p4, p5,
+      avtQSumma: sums[0], avtASumma: sums[1], akmSumma: sums[2], dskSumma: sums[3], kolSumma,
       teng: tengsizlikBalli(sums)
     };
     if (kolSumma < engKamKolotka - TOLERANS) {
@@ -427,47 +467,55 @@ function hisobla() {
     }
   }
 
-  for (let n1 = 0; n1 <= maxN[0]; n1++) {
-    for (let n2 = 0; n2 <= maxN[1]; n2++) {
+  for (let n1 = 0; n1 <= maxN[0]; n1++) { // avtobalon
+    for (let n2 = 0; n2 <= maxN[1]; n2++) { // avtoshina
       const usedMin12 = n1 * bigItems[0].min + n2 * bigItems[1].min;
       if (usedMin12 > S) break;
-      for (let n3 = 0; n3 <= maxN[2]; n3++) {
-        const usedMin = usedMin12 + n3 * bigItems[2].min;
-        if (usedMin > S) break;
-        const usedMax = n1 * bigItems[0].max + n2 * bigItems[1].max + n3 * bigItems[2].max;
+      for (let n3 = 0; n3 <= maxN[2]; n3++) { // akumlyator
+        const usedMin123 = usedMin12 + n3 * bigItems[2].min;
+        if (usedMin123 > S) break;
+        for (let n4 = 0; n4 <= maxN[3]; n4++) { // diska
+          const usedMin = usedMin123 + n4 * bigItems[3].min;
+          if (usedMin > S) break;
+          const usedMax = n1 * bigItems[0].max + n2 * bigItems[1].max + n3 * bigItems[2].max + n4 * bigItems[3].max;
 
-        if (S >= usedMin && S <= usedMax && usedMax > 0) {
-          // Kolotkasiz, aniq mos keladi — bu har doim eng ustuvor holat.
-          const prices = bigPrices(usedMin, usedMax, S);
-          nomzodQosh(n1, n2, n3, 0, prices[0], prices[1], prices[2], 0, 0);
-          continue;
+          if (S >= usedMin && S <= usedMax && usedMax > 0) {
+            // Kolotkasiz, aniq mos keladi — bu har doim eng ustuvor holat.
+            const prices = bigPrices(usedMin, usedMax, S);
+            nomzodQosh(n1, n2, n3, n4, 0, prices[0], prices[1], prices[2], prices[3], 0, 0);
+            continue;
+          }
+
+          if (!KOL_MAVJUD) continue;
+
+          const rMin = Math.max(0, S - usedMax);
+          const rMax = S - usedMin;
+          if (rMax < 0) continue;
+
+          // Kolotkani iloji boricha kamroq ishlatish uchun eng kichik n5 va
+          // shu n5 ichida eng kichik R (kolotka summasi) tanlanadi.
+          let n5 = Math.max(1, Math.ceil(rMin / KOL.max));
+          if (KOL.min * n5 > rMax) continue;
+
+          const R = Math.max(rMin, KOL.min * n5);
+          if (R > rMax) continue;
+
+          const bigTotal = S - R;
+          const prices = bigPrices(usedMin, usedMax, bigTotal);
+          nomzodQosh(n1, n2, n3, n4, n5, prices[0], prices[1], prices[2], prices[3], R / n5, R);
         }
-
-        if (!KOL_MAVJUD) continue;
-
-        const rMin = Math.max(0, S - usedMax);
-        const rMax = S - usedMin;
-        if (rMax < 0) continue;
-
-        // Kolotkani iloji boricha kamroq ishlatish uchun eng kichik n4 va
-        // shu n4 ichida eng kichik R (kolotka summasi) tanlanadi.
-        let n4 = Math.max(1, Math.ceil(rMin / KOL.max));
-        if (KOL.min * n4 > rMax) continue;
-
-        const R = Math.max(rMin, KOL.min * n4);
-        if (R > rMax) continue;
-
-        const bigTotal = S - R;
-        const prices = bigPrices(usedMin, usedMax, bigTotal);
-        nomzodQosh(n1, n2, n3, n4, prices[0], prices[1], prices[2], R / n4, R);
       }
     }
   }
 
   let found = null;
   if (nomzodlar.length > 0) {
-    const engTengi = Math.min(...nomzodlar.map(c => c.teng));
-    const engYaxshilari = nomzodlar.filter(c => c.teng <= engTengi + TOLERANS);
+    // Avval avtobalon, keyin avtoshina — shu daraja (kolotka) ichida
+    // avtoshina soni eng kam bo'lgan variantlar tanlanadi.
+    const engKamArzon = Math.min(...nomzodlar.map(c => c.n2));
+    const arzonYaxshilari = nomzodlar.filter(c => c.n2 === engKamArzon);
+    const engTengi = Math.min(...arzonYaxshilari.map(c => c.teng));
+    const engYaxshilari = arzonYaxshilari.filter(c => c.teng <= engTengi + TOLERANS);
     found = engYaxshilari[Math.floor(Math.random() * engYaxshilari.length)];
   }
 
@@ -483,18 +531,21 @@ function hisobla() {
 
   document.getElementById('avtSoni').textContent = found.n1 + ' dona';
   document.getElementById('avtNarx').textContent = (found.n1 > 0 ? fmt(found.p1) + ' so\'mdan' : 'sotilmagan');
-  document.getElementById('akmSoni').textContent = found.n2 + ' dona';
-  document.getElementById('akmNarx').textContent = (found.n2 > 0 ? fmt(found.p2) + ' so\'mdan' : 'sotilmagan');
-  document.getElementById('dskSoni').textContent = found.n3 + ' dona';
-  document.getElementById('dskNarx').textContent = (found.n3 > 0 ? fmt(found.p3) + ' so\'mdan' : 'sotilmagan');
-  document.getElementById('kolSoni').textContent = found.n4 + ' dona';
-  document.getElementById('kolNarx').textContent = (found.n4 > 0 ? fmt(found.p4) + ' so\'mdan' : 'sotilmagan');
+  document.getElementById('arzSoni').textContent = found.n2 + ' dona';
+  document.getElementById('arzNarx').textContent = (found.n2 > 0 ? fmt(found.p2) + ' so\'mdan' : 'sotilmagan');
+  document.getElementById('akmSoni').textContent = found.n3 + ' dona';
+  document.getElementById('akmNarx').textContent = (found.n3 > 0 ? fmt(found.p3) + ' so\'mdan' : 'sotilmagan');
+  document.getElementById('dskSoni').textContent = found.n4 + ' dona';
+  document.getElementById('dskNarx').textContent = (found.n4 > 0 ? fmt(found.p4) + ' so\'mdan' : 'sotilmagan');
+  document.getElementById('kolSoni').textContent = found.n5 + ' dona';
+  document.getElementById('kolNarx').textContent = (found.n5 > 0 ? fmt(found.p5) + ' so\'mdan' : 'sotilmagan');
 
-  document.getElementById('avtJami').textContent = fmt(found.avtSumma) + ' so\'m';
+  document.getElementById('avtJami').textContent = fmt(found.avtQSumma) + ' so\'m';
+  document.getElementById('arzJami').textContent = fmt(found.avtASumma) + ' so\'m';
   document.getElementById('akmJami').textContent = fmt(found.akmSumma) + ' so\'m';
   document.getElementById('dskJami').textContent = fmt(found.dskSumma) + ' so\'m';
   document.getElementById('kolJami').textContent = fmt(found.kolSumma) + ' so\'m';
-  document.getElementById('jamiSumma').textContent = fmt(found.avtSumma + found.akmSumma + found.dskSumma + found.kolSumma) + ' so\'m';
+  document.getElementById('jamiSumma').textContent = fmt(found.avtQSumma + found.avtASumma + found.akmSumma + found.dskSumma + found.kolSumma) + ' so\'m';
 }
 
 document.getElementById('summa').addEventListener('keypress', function(e) {
