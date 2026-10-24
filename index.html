@@ -33,19 +33,19 @@
   }
   .mode-btn {
     flex: 1;
-    padding: 12px 8px;
+    padding: 12px 4px;
     border: 2px solid #e5e7eb;
     border-radius: 10px;
     background: white;
     color: #4b5563;
-    font-size: 13px;
+    font-size: 12px;
     font-weight: 600;
     cursor: pointer;
     text-align: center;
     line-height: 1.3;
   }
   .mode-btn.active { border-color: #2563eb; background: #eff6ff; color: #1e3a8a; }
-  .mode-btn .sub { display: block; font-size: 11px; font-weight: 400; color: #9ca3af; margin-top: 2px; }
+  .mode-btn .sub { display: block; font-size: 10px; font-weight: 400; color: #9ca3af; margin-top: 2px; }
   .mode-btn.active .sub { color: #60a5fa; }
 
   label { display: block; font-size: 14px; color: #4b5563; margin-bottom: 6px; }
@@ -94,7 +94,7 @@
   .panel.active { display: block; }
 
   .settings-tabs { display: flex; gap: 8px; margin-bottom: 16px; }
-  .settings-tabs button { flex: 1; padding: 9px; border: 2px solid #e5e7eb; border-radius: 8px; background: white; color: #6b7280; font-size: 13px; font-weight: 600; cursor: pointer; }
+  .settings-tabs button { flex: 1; padding: 9px 4px; border: 2px solid #e5e7eb; border-radius: 8px; background: white; color: #6b7280; font-size: 12px; font-weight: 600; cursor: pointer; }
   .settings-tabs button.active { border-color: #2563eb; background: #eff6ff; color: #1e3a8a; }
   .settings-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 16px; }
   .settings-grid label { font-size: 13px; margin-bottom: 5px; }
@@ -134,6 +134,10 @@
       <button class="mode-btn" id="modeBtnAksiya" onclick="tanlaRejim('aksiya')">
         Aksiya (0-0-4)
         <span class="sub" id="aksiyaSub"></span>
+      </button>
+      <button class="mode-btn" id="modeBtnAksiya6" onclick="tanlaRejim('aksiya6')">
+        Aksiya (0-0-6)
+        <span class="sub" id="aksiya6Sub"></span>
       </button>
     </div>
 
@@ -192,6 +196,7 @@
     <div class="settings-tabs">
       <button id="setTabOddiy" class="active" onclick="sozlamaTab('oddiy')">Oddiy holat</button>
       <button id="setTabAksiya" onclick="sozlamaTab('aksiya')">Aksiya (0-0-4)</button>
+      <button id="setTabAksiya6" onclick="sozlamaTab('aksiya6')">Aksiya (0-0-6)</button>
     </div>
 
     <div class="group-title">Avtobalon narxi (so'm)</div>
@@ -277,8 +282,18 @@ const DEFAULTS = {
     akm: { min: 0, max: 0 },
     dsk: { min: 0, max: 0 },
     kol: { min: 25000,  max: 45000  }
+  },
+  // Aksiya (0-0-6): narxlari narxlar.json'dagi "aksiya6" bo'limidan olinadi.
+  // Bu yerdagi qiymatlar vaqtincha (0-0-4 bilan bir xil) — json'da bo'lmasa ishlatiladi.
+  aksiya6: {
+    avt: { min: 290000, max: 310000 },
+    avtArzon: { min: 160000, max: 180000 },
+    akm: { min: 0, max: 0 },
+    dsk: { min: 0, max: 0 },
+    kol: { min: 25000,  max: 45000  }
   }
 };
+const REJIMLAR = ['oddiy', 'aksiya', 'aksiya6'];
 const MODE_KEY = 'savdo_kalkulyatori_faol_rejim';
 
 let narxlar = JSON.parse(JSON.stringify(DEFAULTS));
@@ -288,7 +303,7 @@ let sozlamaKorinishRejimi = 'oddiy';
 function yuklaRejim() {
   try {
     const m = localStorage.getItem(MODE_KEY);
-    if (m === 'oddiy' || m === 'aksiya') faolRejim = m;
+    if (REJIMLAR.includes(m)) faolRejim = m;
   } catch (e) {}
 }
 
@@ -300,7 +315,9 @@ function saqlaRejim() {
 
 function narxlarToTekshir(data) {
   if (!data || !data.oddiy || !data.aksiya) return false;
-  for (const rejim of ['oddiy', 'aksiya']) {
+  // aksiya6 json'da bo'lmasligi mumkin (eski fayl) — u holda standart qiymat olinadi.
+  for (const rejim of ['oddiy', 'aksiya', 'aksiya6']) {
+    if (rejim === 'aksiya6' && !data.aksiya6) continue;
     for (const key of ['avt', 'akm', 'dsk', 'kol']) {
       const v = data[rejim][key];
       if (!v || typeof v.min !== 'number' || typeof v.max !== 'number') return false;
@@ -321,7 +338,8 @@ function narxlarniYuklash(korsatXabar) {
         // Avtoshina narxi FAQAT narxlar.json'dan olinishi kerak — standart
         // qiymatdan foydalanilmaydi. JSON'da hali bo'lmasa, avtoshina "tugagan"
         // deb hisoblanadi (min=max=0) va hisoblashda ishtirok etmaydi.
-        for (const rejim of ['oddiy', 'aksiya']) {
+        if (!data.aksiya6) data.aksiya6 = JSON.parse(JSON.stringify(DEFAULTS.aksiya6));
+        for (const rejim of REJIMLAR) {
           if (!avtArzonToTekshir(data[rejim].avtArzon)) {
             data[rejim].avtArzon = { min: 0, max: 0 };
           }
@@ -357,9 +375,11 @@ function fmt(n) { return Math.round(n).toLocaleString('ru-RU').replace(/,/g, ' '
 function yangilaModeTugmalari() {
   document.getElementById('modeBtnOddiy').classList.toggle('active', faolRejim === 'oddiy');
   document.getElementById('modeBtnAksiya').classList.toggle('active', faolRejim === 'aksiya');
-  const o = narxlar.oddiy, a = narxlar.aksiya;
+  document.getElementById('modeBtnAksiya6').classList.toggle('active', faolRejim === 'aksiya6');
+  const o = narxlar.oddiy, a = narxlar.aksiya, a6 = narxlar.aksiya6;
   document.getElementById('oddiySub').textContent = fmt(o.avt.min) + '-' + fmt(o.avt.max);
   document.getElementById('aksiyaSub').textContent = fmt(a.avt.min) + '-' + fmt(a.avt.max);
+  document.getElementById('aksiya6Sub').textContent = fmt(a6.avt.min) + '-' + fmt(a6.avt.max);
 }
 
 function tanlaRejim(rejim) {
@@ -372,6 +392,7 @@ function sozlamaTab(rejim) {
   sozlamaKorinishRejimi = rejim;
   document.getElementById('setTabOddiy').classList.toggle('active', rejim === 'oddiy');
   document.getElementById('setTabAksiya').classList.toggle('active', rejim === 'aksiya');
+  document.getElementById('setTabAksiya6').classList.toggle('active', rejim === 'aksiya6');
   const v = narxlar[rejim];
   document.getElementById('avtMin').value = v.avt.min;
   document.getElementById('avtMax').value = v.avt.max;
