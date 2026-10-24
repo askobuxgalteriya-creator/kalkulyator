@@ -1,16 +1,23 @@
 {
   "oddiy": {
-    "avtArzon": { "min": 150000, "max": 200000 }
+    "avtArzon": { "min": 150000, "max": 200000 },
     "avt": { "min": 260000, "max": 280000 },
     "akm": { "min": 0, "max": 0 },
     "dsk": { "min": 0, "max": 0 },
     "kol": { "min": 30000,  "max": 40000  }
   },
   "aksiya": {
-    "avtArzon": { "min": 170000, "max": 220000 }
+    "avtArzon": { "min": 170000, "max": 220000 },
     "avt": { "min": 290000, "max": 310000 },
     "akm": { "min": 0, "max": 0 },
     "dsk": { "min": 0, "max": 0 },
     "kol": { "min": 35000,  "max": 45000  }
+  },
+  "aksiya6": {
+    "avtArzon": { "min": 180000, "max": 235000 },
+    "avt": { "min": 305000, "max": 330000},
+    "akm": { "min": 0, "max": 0 },
+    "dsk": { "min": 0, "max": 0 },
+    "kol": { "min": 40000,  "max": 50000}
   }
 }
